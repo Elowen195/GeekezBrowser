@@ -77,7 +77,7 @@ function createWindow() {
     return win;
 }
 
-async function generateExtension(profilePath, fingerprint) {
+async function generateExtension(profilePath, fingerprint, profileName, watermarkStyle) {
     const extDir = path.join(profilePath, 'extension');
     await fs.ensureDir(extDir);
     const manifest = {
@@ -87,7 +87,8 @@ async function generateExtension(profilePath, fingerprint) {
         description: "Privacy Protection",
         content_scripts: [{ matches: ["<all_urls>"], js: ["content.js"], run_at: "document_start", all_frames: true, world: "MAIN" }]
     };
-    const scriptContent = getInjectScript(fingerprint);
+    const style = watermarkStyle || 'enhanced'; // 默认使用增强水印
+    const scriptContent = getInjectScript(fingerprint, profileName, style);
     await fs.writeJson(path.join(extDir, 'manifest.json'), manifest);
     await fs.writeFile(path.join(extDir, 'content.js'), scriptContent);
     return extDir;
@@ -208,7 +209,74 @@ ipcMain.handle('get-running-ids', () => Object.keys(activeProcesses));
 ipcMain.handle('get-profiles', async () => { if (!fs.existsSync(PROFILES_FILE)) return []; return fs.readJson(PROFILES_FILE); });
 ipcMain.handle('update-profile', async (event, updatedProfile) => { let profiles = await fs.readJson(PROFILES_FILE); const index = profiles.findIndex(p => p.id === updatedProfile.id); if (index > -1) { profiles[index] = updatedProfile; await fs.writeJson(PROFILES_FILE, profiles); return true; } return false; });
 ipcMain.handle('save-profile', async (event, data) => { const profiles = fs.existsSync(PROFILES_FILE) ? await fs.readJson(PROFILES_FILE) : []; const fingerprint = data.fingerprint || generateFingerprint(); if (data.timezone) fingerprint.timezone = data.timezone; else fingerprint.timezone = "America/Los_Angeles"; const newProfile = { id: uuidv4(), name: data.name, proxyStr: data.proxyStr, tags: data.tags || [], fingerprint: fingerprint, preProxyOverride: 'default', isSetup: false, createdAt: Date.now() }; profiles.push(newProfile); await fs.writeJson(PROFILES_FILE, profiles); return newProfile; });
-ipcMain.handle('delete-profile', async (event, id) => { if (activeProcesses[id]) { await forceKill(activeProcesses[id].xrayPid); try { await activeProcesses[id].browser.close(); } catch (e) { } delete activeProcesses[id]; await new Promise(r => setTimeout(r, 500)); } let profiles = await fs.readJson(PROFILES_FILE); profiles = profiles.filter(p => p.id !== id); await fs.writeJson(PROFILES_FILE, profiles); const profileDir = path.join(DATA_PATH, id); const trashDest = path.join(TRASH_PATH, `${id}_${Date.now()}`); try { if (fs.existsSync(profileDir)) fs.renameSync(profileDir, trashDest); } catch (err) { fs.move(profileDir, trashDest).catch(() => { }); } return true; });
+ipcMain.handle('delete-profile', async (event, id) => {
+    // 关闭正在运行的进程
+    if (activeProcesses[id]) {
+        await forceKill(activeProcesses[id].xrayPid);
+        try {
+            await activeProcesses[id].browser.close();
+        } catch (e) { }
+
+        // 关闭日志文件描述符（Windows 必须）
+        if (activeProcesses[id].logFd !== undefined) {
+            try {
+                fs.closeSync(activeProcesses[id].logFd);
+                console.log('Closed log file descriptor');
+            } catch (e) {
+                console.error('Failed to close log fd:', e.message);
+            }
+        }
+
+        delete activeProcesses[id];
+        // Windows 需要更长的等待时间让文件释放
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // 从 profiles.json 中删除
+    let profiles = await fs.readJson(PROFILES_FILE);
+    profiles = profiles.filter(p => p.id !== id);
+    await fs.writeJson(PROFILES_FILE, profiles);
+
+    // 永久删除 profile 文件夹（带重试机制）
+    const profileDir = path.join(DATA_PATH, id);
+    let deleted = false;
+
+    // 尝试删除 3 次
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            if (fs.existsSync(profileDir)) {
+                // 使用 fs-extra 的 remove，它会递归删除
+                await fs.remove(profileDir);
+                console.log(`Deleted profile folder: ${profileDir}`);
+                deleted = true;
+                break;
+            } else {
+                deleted = true;
+                break;
+            }
+        } catch (err) {
+            console.error(`Delete attempt ${attempt} failed:`, err.message);
+            if (attempt < 3) {
+                // 等待后重试
+                await new Promise(r => setTimeout(r, 500 * attempt));
+            }
+        }
+    }
+
+    // 如果删除失败，移到回收站作为后备方案
+    if (!deleted && fs.existsSync(profileDir)) {
+        console.warn(`Failed to delete, moving to trash: ${profileDir}`);
+        const trashDest = path.join(TRASH_PATH, `${id}_${Date.now()}`);
+        try {
+            await fs.move(profileDir, trashDest);
+            console.log(`Moved to trash: ${trashDest}`);
+        } catch (err) {
+            console.error(`Failed to move to trash:`, err);
+        }
+    }
+
+    return true;
+});
 ipcMain.handle('get-settings', async () => { if (fs.existsSync(SETTINGS_FILE)) return fs.readJson(SETTINGS_FILE); return { preProxies: [], mode: 'single', enablePreProxy: false }; });
 ipcMain.handle('save-settings', async (e, settings) => { await fs.writeJson(SETTINGS_FILE, settings); return true; });
 ipcMain.handle('select-extension-folder', async () => {
@@ -246,7 +314,7 @@ ipcMain.handle('export-data', async (e, type) => { const profiles = fs.existsSyn
 ipcMain.handle('import-data', async () => { const { filePaths } = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'YAML', extensions: ['yml', 'yaml'] }] }); if (filePaths && filePaths.length > 0) { try { const content = await fs.readFile(filePaths[0], 'utf8'); const data = yaml.load(content); let updated = false; if (data.profiles || data.preProxies || data.subscriptions) { if (Array.isArray(data.profiles)) { const currentProfiles = fs.existsSync(PROFILES_FILE) ? await fs.readJson(PROFILES_FILE) : []; data.profiles.forEach(p => { const idx = currentProfiles.findIndex(cp => cp.id === p.id); if (idx > -1) currentProfiles[idx] = p; else { if (!p.id) p.id = uuidv4(); currentProfiles.push(p); } }); await fs.writeJson(PROFILES_FILE, currentProfiles); updated = true; } if (Array.isArray(data.preProxies) || Array.isArray(data.subscriptions)) { const currentSettings = fs.existsSync(SETTINGS_FILE) ? await fs.readJson(SETTINGS_FILE) : { preProxies: [], subscriptions: [] }; if (data.preProxies) { if (!currentSettings.preProxies) currentSettings.preProxies = []; data.preProxies.forEach(p => { if (!currentSettings.preProxies.find(cp => cp.id === p.id)) currentSettings.preProxies.push(p); }); } if (data.subscriptions) { if (!currentSettings.subscriptions) currentSettings.subscriptions = []; data.subscriptions.forEach(s => { if (!currentSettings.subscriptions.find(cs => cs.id === s.id)) currentSettings.subscriptions.push(s); }); } await fs.writeJson(SETTINGS_FILE, currentSettings); updated = true; } } else if (data.name && data.proxyStr && data.fingerprint) { const profiles = fs.existsSync(PROFILES_FILE) ? await fs.readJson(PROFILES_FILE) : []; const newProfile = { ...data, id: uuidv4(), isSetup: false, createdAt: Date.now() }; profiles.push(newProfile); await fs.writeJson(PROFILES_FILE, profiles); updated = true; } return updated; } catch (e) { console.error(e); throw e; } } return false; });
 
 // --- 核心启动逻辑 ---
-ipcMain.handle('launch-profile', async (event, profileId) => {
+ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
     const sender = event.sender;
 
     if (activeProcesses[profileId]) {
@@ -326,11 +394,6 @@ ipcMain.handle('launch-profile', async (event, profileId) => {
             if (!preferences.webrtc) preferences.webrtc = {};
             preferences.webrtc.ip_handling_policy = 'disable_non_proxied_udp';
             await fs.writeJson(preferencesPath, preferences);
-
-            // Bookmarks
-            const bookmarksPath = path.join(defaultProfileDir, 'Bookmarks');
-            const bookmarkData = { "checksum": "0", "roots": { "bookmark_bar": { "children": [{ "date_added": "13245678900000000", "guid": uuidv4(), "id": "1", "name": `🔍 ${profile.name}`, "type": "url", "url": "chrome://newtab/" }], "date_added": "13245678900000000", "date_modified": "0", "id": "1", "name": "Bookmarks Bar", "type": "folder" }, "other": { "children": [], "date_added": "0", "id": "2", "name": "Other Bookmarks", "type": "folder" }, "synced": { "children": [], "date_added": "0", "id": "3", "name": "Mobile Bookmarks", "type": "folder" } }, "version": 1 };
-            await fs.writeJson(bookmarksPath, bookmarkData);
         } catch (e) { }
 
         const config = generateXrayConfig(profile.proxyStr, localPort, finalPreProxyConfig);
@@ -341,8 +404,9 @@ ipcMain.handle('launch-profile', async (event, profileId) => {
         // 优化：减少等待时间，Xray 通常 300ms 内就能启动
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        // 1. 生成 GeekEZ Guard 扩展
-        const extPath = await generateExtension(profileDir, profile.fingerprint);
+        // 1. 生成 GeekEZ Guard 扩展（使用传递的水印样式）
+        const style = watermarkStyle || 'enhanced'; // 默认使用增强水印
+        const extPath = await generateExtension(profileDir, profile.fingerprint, profile.name, style);
 
         // 2. 获取用户自定义扩展
         const userExts = settings.userExtensions || [];
@@ -396,12 +460,25 @@ ipcMain.handle('launch-profile', async (event, profileId) => {
             dumpio: false
         });
 
-        activeProcesses[profileId] = { xrayPid: xrayProcess.pid, browser };
+        activeProcesses[profileId] = {
+            xrayPid: xrayProcess.pid,
+            browser,
+            logFd: logFd  // 存储日志文件描述符，用于后续关闭
+        };
         sender.send('profile-status', { id: profileId, status: 'running' });
 
         browser.on('disconnected', async () => {
             if (activeProcesses[profileId]) {
                 const pid = activeProcesses[profileId].xrayPid;
+                const logFd = activeProcesses[profileId].logFd;
+
+                // 关闭日志文件描述符
+                if (logFd !== undefined) {
+                    try {
+                        fs.closeSync(logFd);
+                    } catch (e) { }
+                }
+
                 delete activeProcesses[profileId];
                 await forceKill(pid);
 

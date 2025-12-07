@@ -388,6 +388,7 @@
             transition: 0.2s;
             position: relative;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .profile-item:hover {
@@ -929,7 +930,8 @@
 
         .timezone-item.hidden {
             display: none;
-        }    </style>
+        }
+    </style>
 </head>
 
 <body data-theme="geek">
@@ -1229,9 +1231,52 @@
                 <div id="settings-advanced" class="settings-section" style="display:none;">
                     <h3 style="margin-bottom:15px; color:var(--accent);" data-i18n="settingsAdvTitle">Advanced Settings
                     </h3>
-                    <p style="font-size:12px; opacity:0.7;" data-i18n="settingsAdvDesc">
-                        Advanced features coming soon...
-                    </p>
+
+                    <!-- Watermark Style Section -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;">🏷️ 环境标识样式</h4>
+                        <p style="font-size:12px; opacity:0.7; margin-bottom:15px;">
+                            选择环境标识的显示样式，重启环境后生效
+                        </p>
+
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            <!-- 方案5: 增强水印 (默认) -->
+                            <label
+                                style="display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; transition:0.2s;"
+                                onmouseover="this.style.borderColor='var(--accent)'"
+                                onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='var(--border)'">
+                                <input type="radio" name="watermarkStyle" value="enhanced"
+                                    style="margin-top:3px; width:auto; cursor:pointer;"
+                                    onchange="saveWatermarkStyle('enhanced')">
+                                <div style="flex:1;">
+                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);">
+                                        🎯 增强水印 (推荐)
+                                    </div>
+                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">
+                                        右下角显示，渐变背景 + 图标，轻微脉冲动画，不占用页面空间
+                                    </div>
+                                </div>
+                            </label>
+
+                            <!-- 方案1: 顶部横幅 -->
+                            <label
+                                style="display:flex; align-items:flex-start; gap:10px; padding:12px; border:1px solid var(--border); border-radius:6px; cursor:pointer; transition:0.2s;"
+                                onmouseover="this.style.borderColor='var(--accent)'"
+                                onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='var(--border)'">
+                                <input type="radio" name="watermarkStyle" value="banner"
+                                    style="margin-top:3px; width:auto; cursor:pointer;"
+                                    onchange="saveWatermarkStyle('banner')">
+                                <div style="flex:1;">
+                                    <div style="font-weight:bold; margin-bottom:5px; color:var(--text-primary);">
+                                        🔹 顶部横幅
+                                    </div>
+                                    <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">
+                                        页面顶部显示，非常醒目，可关闭，占用约40px空间
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
 

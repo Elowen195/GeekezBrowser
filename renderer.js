@@ -509,7 +509,8 @@ async function saveNewProfile() {
 
 async function launch(id) {
     try {
-        const msg = await window.electronAPI.launchProfile(id);
+        const watermarkStyle = localStorage.getItem('geekez_watermark_style') || 'enhanced';
+        const msg = await window.electronAPI.launchProfile(id, watermarkStyle);
         if (msg && msg.includes(':')) showAlert(msg);
     } catch (e) { showAlert('Error: ' + e.message); }
 }
@@ -929,9 +930,37 @@ function switchHelpTab(tabName) {
 function openSettings() {
     document.getElementById('settingsModal').style.display = 'flex';
     loadUserExtensions();
+    loadWatermarkStyle();
 }
 function closeSettings() {
     document.getElementById('settingsModal').style.display = 'none';
+}
+
+// Watermark Style Functions
+function loadWatermarkStyle() {
+    const style = localStorage.getItem('geekez_watermark_style') || 'enhanced';
+    const radios = document.getElementsByName('watermarkStyle');
+    radios.forEach(radio => {
+        if (radio.value === style) {
+            radio.checked = true;
+            radio.parentElement.style.borderColor = 'var(--accent)';
+        } else {
+            radio.parentElement.style.borderColor = 'var(--border)';
+        }
+    });
+}
+
+function saveWatermarkStyle(style) {
+    localStorage.setItem('geekez_watermark_style', style);
+    const radios = document.getElementsByName('watermarkStyle');
+    radios.forEach(radio => {
+        if (radio.checked) {
+            radio.parentElement.style.borderColor = 'var(--accent)';
+        } else {
+            radio.parentElement.style.borderColor = 'var(--border)';
+        }
+    });
+    showAlert('水印样式已保存，重启环境后生效');
 }
 function switchSettingsTab(tabName) {
     // Update tab buttons

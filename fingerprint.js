@@ -86,8 +86,10 @@ function generateFingerprint() {
 }
 
 // 注入脚本：包含复杂的时区伪装逻辑
-function getInjectScript(fp) {
+function getInjectScript(fp, profileName, watermarkStyle) {
     const fpJson = JSON.stringify(fp);
+    const safeProfileName = (profileName || 'Profile').replace(/[<>"'&]/g, ''); // 防止 XSS
+    const style = watermarkStyle || 'enhanced'; // 默认使用增强水印
     return `
     (function() {
         try {
@@ -212,6 +214,126 @@ function getInjectScript(fp) {
                 return new originalPC(config);
             };
             window.RTCPeerConnection.prototype = originalPC.prototype;
+
+            // --- 6. 浮动水印（显示环境名称）---
+            // 根据用户设置选择水印样式
+            const watermarkStyle = '${style}';
+            
+            function createWatermark() {
+                try {
+                    // 检查是否已存在水印（避免重复创建）
+                    if (document.getElementById('geekez-watermark')) return;
+                    
+                    // 确保 body 存在
+                    if (!document.body) {
+                        setTimeout(createWatermark, 50);
+                        return;
+                    }
+                    
+                    if (watermarkStyle === 'banner') {
+                        // 方案1: 顶部横幅
+                        const banner = document.createElement('div');
+                        banner.id = 'geekez-watermark';
+                        banner.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5)); backdrop-filter: blur(10px); color: white; padding: 5px 20px; text-align: center; font-size: 12px; font-weight: 500; z-index: 2147483647; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; gap: 8px; font-family: monospace;';
+                        
+                        const icon = document.createElement('span');
+                        icon.textContent = '🔹';
+                        icon.style.cssText = 'font-size: 14px;';
+                        
+                        const text = document.createElement('span');
+                        text.textContent = '环境：${safeProfileName}';
+                        
+                        const closeBtn = document.createElement('button');
+                        closeBtn.textContent = '×';
+                        closeBtn.style.cssText = 'position: absolute; right: 10px; background: rgba(255,255,255,0.2); border: none; color: white; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; transition: background 0.2s; font-family: monospace;';
+                        closeBtn.onmouseover = function() { this.style.background = 'rgba(255,255,255,0.3)'; };
+                        closeBtn.onmouseout = function() { this.style.background = 'rgba(255,255,255,0.2)'; };
+                        closeBtn.onclick = function() { banner.style.display = 'none'; };
+                        
+                        banner.appendChild(icon);
+                        banner.appendChild(text);
+                        banner.appendChild(closeBtn);
+                        document.body.appendChild(banner);
+                        
+                    } else {
+                        // 方案5: 增强水印 (默认)
+                        const watermark = document.createElement('div');
+                        watermark.id = 'geekez-watermark';
+                        watermark.style.cssText = 'position: fixed; bottom: 16px; right: 16px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.5), rgba(118, 75, 162, 0.5)); backdrop-filter: blur(10px); color: white; padding: 10px 16px; border-radius: 8px; font-size: 15px; font-weight: 600; z-index: 2147483647; pointer-events: none; user-select: none; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); display: flex; align-items: center; gap: 8px; font-family: monospace; animation: geekez-pulse 2s ease-in-out infinite;';
+                        
+                        const icon = document.createElement('span');
+                        icon.textContent = '🎯';
+                        icon.style.cssText = 'font-size: 18px; animation: geekez-rotate 3s linear infinite;';
+                        
+                        const text = document.createElement('span');
+                        text.textContent = '${safeProfileName}';
+                        
+                        watermark.appendChild(icon);
+                        watermark.appendChild(text);
+                        document.body.appendChild(watermark);
+                        
+                        // 添加动画样式
+                        if (!document.getElementById('geekez-watermark-styles')) {
+                            const style = document.createElement('style');
+                            style.id = 'geekez-watermark-styles';
+                            style.textContent = '@keyframes geekez-pulse { 0%, 100% { box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); } 50% { box-shadow: 0 4px 25px rgba(102, 126, 234, 0.6); } } @keyframes geekez-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+                            document.head.appendChild(style);
+                        }
+                        
+                        // 自适应颜色函数（保留之前的功能）
+                        function updateWatermarkColor() {
+                            try {
+                                const rect = watermark.getBoundingClientRect();
+                                const x = rect.left + rect.width / 2;
+                                const y = rect.top + rect.height / 2;
+                                
+                                watermark.style.display = 'none';
+                                const elementBelow = document.elementFromPoint(x, y) || document.body;
+                                watermark.style.display = '';
+                                
+                                const bgColor = window.getComputedStyle(elementBelow).backgroundColor;
+                                const rgb = bgColor.match(/\\d+/g);
+                                
+                                if (rgb && rgb.length >= 3) {
+                                    const r = parseInt(rgb[0]);
+                                    const g = parseInt(rgb[1]);
+                                    const b = parseInt(rgb[2]);
+                                    const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+                                    
+                                    // 保持渐变背景，统一使用50%透明度
+                                    watermark.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3)';
+                                }
+                            } catch(e) { /* 忽略错误 */ }
+                        }
+                        
+                        setTimeout(updateWatermarkColor, 100);
+                        
+                        let colorUpdateTimer;
+                        function scheduleColorUpdate() {
+                            clearTimeout(colorUpdateTimer);
+                            colorUpdateTimer = setTimeout(updateWatermarkColor, 200);
+                        }
+                        
+                        window.addEventListener('scroll', scheduleColorUpdate, { passive: true });
+                        window.addEventListener('resize', scheduleColorUpdate, { passive: true });
+                        
+                        const observer = new MutationObserver(scheduleColorUpdate);
+                        observer.observe(document.body, { 
+                            attributes: true, 
+                            attributeFilter: ['style', 'class'],
+                            subtree: true 
+                        });
+                    }
+                    
+                } catch(e) { /* 静默失败，不影响页面 */ }
+            }
+            
+            // 立即尝试创建（针对已加载的页面）
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', createWatermark);
+            } else {
+                createWatermark();
+            }
 
         } catch(e) { console.error("FP Error", e); }
     })();
