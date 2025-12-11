@@ -1073,8 +1073,10 @@
                     <input type="text" id="editTimezone" placeholder="Type to search or select..." autocomplete="off">
                     <div class="timezone-dropdown" id="editTimezoneDropdown"></div>
                 </div>
-                <div style="font-size:10px; color:#f39c12; margin-top:-8px; margin-bottom:8px;">
-                    ⚠️ Modifying timezone may cause some login pages (AWS, Oracle) to fail. Use "Auto (No Change)" for login environments.
+                <div data-i18n="timezoneWarning"
+                    style="font-size:10px; color:#f39c12; margin-top:-8px; margin-bottom:8px;">
+                    ⚠️ Modifying timezone may cause some login pages (AWS, Oracle) to fail. Use "Auto (No Change)" for
+                    login environments.
                 </div>
                 <label data-i18n="proxyLink" style="font-size:11px; font-weight:bold; opacity:0.8;">Proxy</label>
                 <textarea id="editProxy" rows="4"></textarea>
