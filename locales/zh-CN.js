@@ -85,7 +85,7 @@ window.zhCN = {
     timezoneLabel: "时区",
     timezoneWarning: "⚠️ 修改时区可能导致部分登录页白屏(AWS/Oracle)。登录号请用 'Auto'。",
     locationLabel: "地理位置 (Geo)",
-    geoAuto: "默认 (不修改)",
+    geoAuto: "自动 (基于IP)",
     geoHint: "请选择与代理 IP 一致的城市。位置/IP不符=封号。",
     settingsTitle: "⚙️ 设置",
     settingsTabExtensions: "🧩 扩展管理",

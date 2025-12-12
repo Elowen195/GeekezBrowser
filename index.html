@@ -1078,14 +1078,15 @@
                     ⚠️ Modifying timezone may cause some login pages (AWS, Oracle) to fail. Use "Auto (No Change)" for
                     login environments.
                 </div>
-                <!-- Location Selector -->
+                <!-- Location Selector (Searchable) -->
                 <label data-i18n="locationLabel"
                     style="font-size:11px; font-weight:bold; opacity:0.8; margin-top:8px; display:block;">Location
                     (Geo)</label>
-                <select id="editCity"
-                    style="width:100%; margin-bottom:4px; background:var(--bg-secondary); color:var(--text-primary); border:1px solid var(--border); padding:5px; border-radius:4px;">
-                    <option value="auto" data-i18n="geoAuto">Auto (IP Based)</option>
-                </select>
+                <div class="timezone-wrapper">
+                    <input type="text" id="editCity" placeholder="Type to search city..." autocomplete="off">
+                    <div class="timezone-dropdown" id="editCityDropdown"></div>
+                </div>
+                <!-- Hidden input to store confirmed value if needed, but we can parse the text or use a global var -->
                 <div data-i18n="geoHint" style="font-size:10px; opacity:0.5; margin-bottom:12px;">Select a city matching
                     your proxy.</div>
                 <label data-i18n="proxyLink" style="font-size:11px; font-weight:bold; opacity:0.8;">Proxy</label>
@@ -1325,6 +1326,7 @@
     </div>
 
     <script src="timezones.js"></script>
+    <script src="cities.js"></script>
     <script src="locales/zh-CN.js"></script>
     <script src="i18n.js"></script>
     <script src="renderer.js"></script>

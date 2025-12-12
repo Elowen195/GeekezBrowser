@@ -8,28 +8,100 @@ let inputCallback = null;
 let searchText = '';
 let viewMode = localStorage.getItem('geekez_view') || 'list';
 
-const GEO_CITIES = {
-    'new_york': { name: 'New York (US)', lat: 40.7128, lng: -74.0060 },
-    'los_angeles': { name: 'Los Angeles (US)', lat: 34.0522, lng: -118.2437 },
-    'san_francisco': { name: 'San Francisco (US)', lat: 37.7749, lng: -122.4194 },
-    'london': { name: 'London (UK)', lat: 51.5074, lng: -0.1278 },
-    'tokyo': { name: 'Tokyo (JP)', lat: 35.6762, lng: 139.6503 },
-    'singapore': { name: 'Singapore (SG)', lat: 1.3521, lng: 103.8198 },
-    'hong_kong': { name: 'Hong Kong (CN)', lat: 22.3193, lng: 114.1694 },
-    'taipei': { name: 'Taipei (TW)', lat: 25.0330, lng: 121.5654 },
-    'paris': { name: 'Paris (FR)', lat: 48.8566, lng: 2.3522 },
-    'berlin': { name: 'Berlin (DE)', lat: 52.5200, lng: 13.4050 },
-    'sydney': { name: 'Sydney (AU)', lat: -33.8688, lng: 151.2093 }
-};
+// Custom City Dropdown Initialization (Matches Timezone Logic)
+function initCustomCityDropdown(inputId, dropdownId) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
 
-function populateCitySelect() {
-    const sel = document.getElementById('editCity');
-    if (!sel || sel.options.length > 1) return;
-    Object.keys(GEO_CITIES).forEach(k => {
-        const opt = document.createElement('option');
-        opt.value = k;
-        opt.innerText = GEO_CITIES[k].name;
-        sel.appendChild(opt);
+    if (!input || !dropdown) return;
+
+    // Build cached list
+    let allOptions = [];
+    // 1. Add English "Auto" option
+    allOptions.push({ name: "Auto (IP Based)", isAuto: true });
+    // 2. Add cities
+    console.log('[CityDropdown] Window.CITY_DATA:', window.CITY_DATA);
+    if (window.CITY_DATA) {
+        allOptions = allOptions.concat(window.CITY_DATA);
+    }
+    console.log('[CityDropdown] All Options:', allOptions.length);
+
+    let selectedIndex = -1;
+
+    function populateDropdown(filter = '') {
+        const lowerFilter = filter.toLowerCase();
+        // 如果是 "Auto" 则显示全部，否则按关键词过滤
+        const shouldShowAll = filter === 'Auto (IP Based)' || filter === '';
+
+        const filtered = shouldShowAll ? allOptions : allOptions.filter(item =>
+            item.name.toLowerCase().includes(lowerFilter)
+        );
+
+        dropdown.innerHTML = filtered.map((item, index) =>
+            `<div class="timezone-item" data-name="${item.name}" data-index="${index}">${item.name}</div>`
+        ).join('');
+
+        selectedIndex = -1;
+    }
+
+    function showDropdown() {
+        populateDropdown(''); // Always show full list on click
+        dropdown.classList.add('active');
+    }
+
+    function hideDropdown() {
+        dropdown.classList.remove('active');
+        selectedIndex = -1;
+    }
+
+    function selectItem(name) {
+        input.value = name;
+        hideDropdown();
+    }
+
+    input.addEventListener('focus', showDropdown);
+
+    // Prevent blur from closing immediately so click can register
+    // Relaxed for click-outside logic instead
+
+    input.addEventListener('input', () => {
+        populateDropdown(input.value);
+        if (!dropdown.classList.contains('active')) dropdown.classList.add('active');
+    });
+
+    // Keyboard nav
+    input.addEventListener('keydown', (e) => {
+        const items = dropdown.querySelectorAll('.timezone-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+            updateSelection(items);
+        } else if (e.key === 'Enter' && selectedIndex >= 0) {
+            e.preventDefault();
+            selectItem(items[selectedIndex].dataset.name);
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function updateSelection(items) {
+        items.forEach((item, index) => item.classList.toggle('selected', index === selectedIndex));
+        if (items[selectedIndex]) items[selectedIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    dropdown.addEventListener('click', (e) => {
+        const item = e.target.closest('.timezone-item');
+        if (item) selectItem(item.dataset.name);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            hideDropdown();
+        }
     });
 }
 
@@ -365,8 +437,11 @@ async function openEditModal(id) {
     const displayTimezone = savedTimezone === 'Auto' ? 'Auto (No Change)' : savedTimezone;
     document.getElementById('editTimezone').value = displayTimezone;
 
-    populateCitySelect();
-    document.getElementById('editCity').value = fp.city || 'auto';
+    initCustomCityDropdown('editCity', 'editCityDropdown');
+
+    // Use stored value directly or Default English Auto
+    const savedCity = fp.city || "Auto (IP Based)";
+    document.getElementById('editCity').value = savedCity;
 
     const sel = document.getElementById('editPreProxyOverride');
     sel.options[0].text = t('optDefault'); sel.options[1].text = t('optOn'); sel.options[2].text = t('optOff');
@@ -401,12 +476,18 @@ async function saveEditProfile() {
         p.fingerprint.timezone = timezoneValue === 'Auto (No Change)' ? 'Auto' : timezoneValue;
         console.log('[saveEditProfile] Converted timezone:', p.fingerprint.timezone);
 
-        const cityKey = document.getElementById('editCity').value;
-        p.fingerprint.city = cityKey;
-        if (cityKey !== 'auto' && GEO_CITIES[cityKey]) {
-            const c = GEO_CITIES[cityKey];
-            p.fingerprint.geolocation = { latitude: c.lat, longitude: c.lng, accuracy: 100 };
+
+        // Save City & Geolocation
+        const cityInput = document.getElementById('editCity').value;
+        if (cityInput && cityInput !== 'Auto (IP Based)') {
+            const cityData = window.CITY_DATA ? window.CITY_DATA.find(c => c.name === cityInput) : null;
+            if (cityData) {
+                p.fingerprint.city = cityData.name;
+                p.fingerprint.geolocation = { latitude: cityData.lat, longitude: cityData.lng, accuracy: 100 };
+            }
         } else {
+            // Auto mode: remove geolocation to let system/IP decide
+            delete p.fingerprint.city;
             delete p.fingerprint.geolocation;
         }
         p.fingerprint.userAgent = document.getElementById('editUA').value;
@@ -897,11 +978,7 @@ function initCustomTimezoneDropdown(inputId, dropdownId) {
         selectedIndex = -1;
     }
 
-    // Show dropdown
-    function showDropdown() {
-        populateDropdown(input.value);
-        dropdown.classList.add('active');
-    }
+
 
     // Hide dropdown
     function hideDropdown() {
@@ -915,8 +992,11 @@ function initCustomTimezoneDropdown(inputId, dropdownId) {
         hideDropdown();
     }
 
-    // Input focus - show dropdown
-    input.addEventListener('focus', showDropdown);
+    // Input focus - show dropdown (Show ALL options, ignore current value filter)
+    input.addEventListener('focus', () => {
+        populateDropdown('');
+        dropdown.classList.add('active');
+    });
 
     // Input typing - filter
     input.addEventListener('input', () => {

@@ -83,7 +83,7 @@ const enTranslations = {
     timezoneLabel: "Timezone",
     timezoneWarning: "⚠️ Modifying timezone may cause some login pages (AWS, Oracle) to fail. Use \"Auto (No Change)\" for login environments.",
     locationLabel: "Location (Geo)",
-    geoAuto: "Default (No Change)",
+    geoAuto: "Auto (IP Based)",
     geoHint: "Select a city matching your proxy. Manual mismatch = ban.",
     settingsTitle: "⚙️ Settings",
     settingsTabExtensions: "🧩 Extensions",
