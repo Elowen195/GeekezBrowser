@@ -11,7 +11,9 @@ const http = require('http');
 const https = require('https');
 const os = require('os');
 
-app.disableHardwareAcceleration();
+
+// Hardware acceleration enabled for better UI performance
+// Only disable if GPU compatibility issues occur
 
 const { generateXrayConfig } = require('./utils');
 const { generateFingerprint, getInjectScript } = require('./fingerprint');
