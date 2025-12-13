@@ -275,7 +275,12 @@ async function checkUpdates() {
     try {
         const appRes = await window.electronAPI.invoke('check-app-update');
         if (appRes.update) {
-            showAlert(`${t('appUpdateFound')} (v${appRes.remote})`);
+            // Ask user for confirmation
+            showConfirm(`${t('appUpdateFound')} (v${appRes.remote}). ${t('btnSaveUpdate')}?`, () => {
+                if (appRes.url) {
+                    window.electronAPI.invoke('open-url', appRes.url);
+                }
+            });
             return;
         }
         const xrayRes = await window.electronAPI.invoke('check-xray-update');
