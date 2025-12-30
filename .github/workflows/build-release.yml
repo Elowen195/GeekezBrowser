@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # Trigger on version tags like v1.3.1
 
+permissions:
+  contents: write  # Global permissions for all jobs
+
 jobs:
   build-mac-arm64:
     runs-on: macos-latest  # Apple Silicon runner
@@ -24,14 +27,16 @@ jobs:
       - name: Get latest Xray version
         id: xray_version
         run: |
-          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          XRAY_VERSION=$(curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'])")
           echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for macOS ARM64
         run: |
+          XRAY_VERSION="${{ steps.xray_version.outputs.version }}"
+          echo "Downloading Xray version: $XRAY_VERSION"
           mkdir -p resources/bin/darwin-arm64
-          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-arm64-v8a.zip"
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-macos-arm64-v8a.zip"
           unzip -o xray.zip -d resources/bin/darwin-arm64/
           rm -f xray.zip
           # Move shared files to common bin directory
@@ -48,6 +53,7 @@ jobs:
         run: npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -56,7 +62,7 @@ jobs:
           path: dist/*.dmg
 
   build-mac-x64:
-    runs-on: macos-15  # Intel Mac runner (updated from deprecated macos-13)
+    runs-on: macos-13  # Intel Mac runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,14 +79,16 @@ jobs:
       - name: Get latest Xray version
         id: xray_version
         run: |
-          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          XRAY_VERSION=$(curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'])")
           echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for macOS x64
         run: |
+          XRAY_VERSION="${{ steps.xray_version.outputs.version }}"
+          echo "Downloading Xray version: $XRAY_VERSION"
           mkdir -p resources/bin/darwin-x64
-          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-64.zip"
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-macos-64.zip"
           unzip -o xray.zip -d resources/bin/darwin-x64/
           rm -f xray.zip
           # Move shared files to common bin directory
@@ -97,6 +105,7 @@ jobs:
         run: npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -123,15 +132,17 @@ jobs:
         id: xray_version
         shell: bash
         run: |
-          XRAY_VERSION=$(curl -sL https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          XRAY_VERSION=$(curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'])")
           echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
           echo "Latest Xray version: $XRAY_VERSION"
 
       - name: Download Xray for Windows
         shell: bash
         run: |
+          XRAY_VERSION="${{ steps.xray_version.outputs.version }}"
+          echo "Downloading Xray version: $XRAY_VERSION"
           mkdir -p resources/bin/win32-x64
-          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-windows-64.zip"
+          curl -sL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-windows-64.zip"
           unzip -o xray.zip -d resources/bin/win32-x64/
           rm -f xray.zip
           # Move shared files to common bin directory
@@ -159,8 +170,6 @@ jobs:
   release:
     needs: [build-mac-arm64, build-mac-x64, build-windows]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
