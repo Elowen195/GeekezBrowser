@@ -1,0 +1,185 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.3.1
+
+jobs:
+  build-mac-arm64:
+    runs-on: macos-latest  # Apple Silicon runner
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Get latest Xray version
+        id: xray_version
+        run: |
+          XRAY_VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest Xray version: $XRAY_VERSION"
+
+      - name: Download Xray for macOS ARM64
+        run: |
+          mkdir -p resources/bin/darwin-arm64
+          curl -L "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-arm64-v8a.zip" -o xray.zip
+          unzip xray.zip -d resources/bin/darwin-arm64/
+          rm xray.zip
+          # Move shared files to common bin directory
+          mv resources/bin/darwin-arm64/geoip.dat resources/bin/ 2>/dev/null || true
+          mv resources/bin/darwin-arm64/geosite.dat resources/bin/ 2>/dev/null || true
+          rm -f resources/bin/darwin-arm64/LICENSE resources/bin/darwin-arm64/README.md
+          chmod +x resources/bin/darwin-arm64/xray
+
+      - name: Download Chrome
+        run: |
+          npx @puppeteer/browsers install chrome@129.0.6668.58 --path resources/puppeteer
+
+      - name: Build macOS ARM64
+        run: npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64
+          path: dist/*.dmg
+
+  build-mac-x64:
+    runs-on: macos-13  # Intel Mac runner
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Get latest Xray version
+        id: xray_version
+        run: |
+          XRAY_VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$XRAY_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest Xray version: $XRAY_VERSION"
+
+      - name: Download Xray for macOS x64
+        run: |
+          mkdir -p resources/bin/darwin-x64
+          curl -L "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-macos-64.zip" -o xray.zip
+          unzip xray.zip -d resources/bin/darwin-x64/
+          rm xray.zip
+          # Move shared files to common bin directory
+          mv resources/bin/darwin-x64/geoip.dat resources/bin/ 2>/dev/null || true
+          mv resources/bin/darwin-x64/geosite.dat resources/bin/ 2>/dev/null || true
+          rm -f resources/bin/darwin-x64/LICENSE resources/bin/darwin-x64/README.md
+          chmod +x resources/bin/darwin-x64/xray
+
+      - name: Download Chrome
+        run: |
+          npx @puppeteer/browsers install chrome@129.0.6668.58 --path resources/puppeteer
+
+      - name: Build macOS x64
+        run: npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-x64
+          path: dist/*.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Get latest Xray version
+        id: xray_version
+        shell: powershell
+        run: |
+          $response = Invoke-RestMethod -Uri "https://api.github.com/repos/XTLS/Xray-core/releases/latest"
+          $version = $response.tag_name
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Latest Xray version: $version"
+
+      - name: Download Xray for Windows
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path resources/bin/win32-x64
+          Invoke-WebRequest -Uri "https://github.com/XTLS/Xray-core/releases/download/${{ steps.xray_version.outputs.version }}/Xray-windows-64.zip" -OutFile xray.zip
+          Expand-Archive -Path xray.zip -DestinationPath resources/bin/win32-x64/ -Force
+          Remove-Item xray.zip
+          # Move shared files to common bin directory
+          Move-Item -Path resources/bin/win32-x64/geoip.dat -Destination resources/bin/ -Force -ErrorAction SilentlyContinue
+          Move-Item -Path resources/bin/win32-x64/geosite.dat -Destination resources/bin/ -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path resources/bin/win32-x64/LICENSE -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path resources/bin/win32-x64/README.md -Force -ErrorAction SilentlyContinue
+
+      - name: Download Chrome
+        run: |
+          npx @puppeteer/browsers install chrome@129.0.6668.58 --path resources/puppeteer
+
+      - name: Build Windows
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.exe
+            dist/win-unpacked
+
+  release:
+    needs: [build-mac-arm64, build-mac-x64, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

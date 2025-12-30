@@ -6,9 +6,11 @@ const { exec } = require('child_process');
 const readline = require('readline'); // 引入 readline 用于控制光标
 
 // 配置
-const BIN_DIR = path.join(__dirname, 'resources', 'bin');
-const XRAY_VERSION = 'v24.11.30';
+const RESOURCES_BIN = path.join(__dirname, 'resources', 'bin');
+const PLATFORM_ARCH = `${os.platform()}-${os.arch()}`; // e.g., darwin-arm64, win32-x64
+const BIN_DIR = path.join(RESOURCES_BIN, PLATFORM_ARCH);
 const GH_PROXY = 'https://gh-proxy.com/';
+const XRAY_API_URL = 'https://api.github.com/repos/XTLS/Xray-core/releases/latest';
 
 // --- 辅助工具：格式化字节 ---
 function formatBytes(bytes) {
@@ -73,6 +75,53 @@ function checkNetwork() {
         });
         req.on('error', () => resolve(false));
         req.on('timeout', () => { req.destroy(); resolve(false); });
+    });
+}
+
+// Fetch latest Xray version from GitHub API
+function getLatestXrayVersion(useProxy = false) {
+    return new Promise((resolve, reject) => {
+        const url = useProxy ? (GH_PROXY + XRAY_API_URL) : XRAY_API_URL;
+        const options = {
+            headers: { 'User-Agent': 'GeekEZ-Browser-Setup' },
+            timeout: 10000
+        };
+
+        const makeRequest = (requestUrl) => {
+            const urlObj = new URL(requestUrl);
+            const reqOptions = {
+                hostname: urlObj.hostname,
+                path: urlObj.pathname + urlObj.search,
+                headers: { 'User-Agent': 'GeekEZ-Browser-Setup' },
+                timeout: 10000
+            };
+
+            https.get(reqOptions, (res) => {
+                // Handle redirects
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    makeRequest(res.headers.location);
+                    return;
+                }
+
+                if (res.statusCode !== 200) {
+                    reject(new Error(`GitHub API returned ${res.statusCode}`));
+                    return;
+                }
+
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json.tag_name); // e.g., "v24.12.31"
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }).on('error', reject).on('timeout', () => reject(new Error('Timeout')));
+        };
+
+        makeRequest(url);
     });
 }
 
@@ -149,10 +198,21 @@ async function main() {
 
         console.log(`🌍 Network: ${isGlobal ? 'Global' : 'CN (Mirror)'}`);
 
-        const baseUrl = `https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/${xrayAsset}`;
+        // Get latest Xray version from GitHub
+        let xrayVersion;
+        try {
+            console.log('🔍 Fetching latest Xray version...');
+            xrayVersion = await getLatestXrayVersion(!isGlobal);
+            console.log(`📦 Latest version: ${xrayVersion}`);
+        } catch (e) {
+            console.log('⚠️  Failed to get latest version, using fallback: v24.11.30');
+            xrayVersion = 'v24.11.30';
+        }
+
+        const baseUrl = `https://github.com/XTLS/Xray-core/releases/download/${xrayVersion}/${xrayAsset}`;
         const downloadUrl = isGlobal ? baseUrl : (GH_PROXY + baseUrl);
 
-        process.stdout.write(`⬇️  Downloading Xray (${XRAY_VERSION})...\n`);
+        process.stdout.write(`⬇️  Downloading Xray (${xrayVersion})...\n`);
 
         // 这里的 Label 用于进度条前缀
         await downloadFile(downloadUrl, zipPath, 'Xray Core');
@@ -160,8 +220,23 @@ async function main() {
         await extractZip(zipPath, BIN_DIR);
         fs.unlinkSync(zipPath);
 
+        // Move shared resources (geoip.dat, geosite.dat) to common bin directory for asset loading
+        const sharedFiles = ['geoip.dat', 'geosite.dat', 'LICENSE', 'README.md'];
+        sharedFiles.forEach(file => {
+            const srcPath = path.join(BIN_DIR, file);
+            const destPath = path.join(RESOURCES_BIN, file);
+            if (fs.existsSync(srcPath)) {
+                // Only copy if not exists or source is newer
+                if (!fs.existsSync(destPath)) {
+                    fs.copyFileSync(srcPath, destPath);
+                }
+                // Remove from platform dir to save space
+                fs.unlinkSync(srcPath);
+            }
+        });
+
         if (os.platform() !== 'win32') fs.chmodSync(path.join(BIN_DIR, exeName), '755');
-        console.log('✅ Xray Updated Successfully!');
+        console.log(`✅ Xray Updated Successfully! (Platform: ${PLATFORM_ARCH})`);
 
         // 2. 准备 Chrome
         process.stdout.write('⬇️  Downloading Chrome...\n');

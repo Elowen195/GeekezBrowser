@@ -19,8 +19,14 @@ const { generateXrayConfig } = require('./utils');
 const { generateFingerprint, getInjectScript } = require('./fingerprint');
 
 const isDev = !app.isPackaged;
-const BIN_DIR = isDev ? path.join(__dirname, 'resources', 'bin') : path.join(process.resourcesPath, 'bin');
+const RESOURCES_BIN = isDev ? path.join(__dirname, 'resources', 'bin') : path.join(process.resourcesPath, 'bin');
+// Use platform+arch specific directory for xray binary
+const PLATFORM_ARCH = `${process.platform}-${process.arch}`; // e.g., darwin-arm64, darwin-x64, win32-x64
+const BIN_DIR = path.join(RESOURCES_BIN, PLATFORM_ARCH);
 const BIN_PATH = path.join(BIN_DIR, process.platform === 'win32' ? 'xray.exe' : 'xray');
+// Fallback to old location for backward compatibility
+const BIN_DIR_LEGACY = RESOURCES_BIN;
+const BIN_PATH_LEGACY = path.join(BIN_DIR_LEGACY, process.platform === 'win32' ? 'xray.exe' : 'xray');
 const DATA_PATH = path.join(app.getPath('userData'), 'BrowserProfiles');
 const TRASH_PATH = path.join(app.getPath('userData'), '_Trash_Bin');
 const PROFILES_FILE = path.join(DATA_PATH, 'profiles.json');
@@ -132,7 +138,7 @@ ipcMain.handle('test-proxy-latency', async (e, proxyStr) => {
         let outbound; try { const { parseProxyLink } = require('./utils'); outbound = parseProxyLink(proxyStr, "proxy_test"); } catch (err) { return { success: false, msg: "Format Err" }; }
         const config = { log: { loglevel: "none" }, inbounds: [{ port: tempPort, listen: "127.0.0.1", protocol: "socks", settings: { udp: true } }], outbounds: [outbound, { protocol: "freedom", tag: "direct" }], routing: { rules: [{ type: "field", outboundTag: "proxy_test", port: "0-65535" }] } };
         await fs.writeJson(tempConfigPath, config);
-        const xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': BIN_DIR }, stdio: 'ignore', windowsHide: true });
+        const xrayProcess = spawn(BIN_PATH, ['-c', tempConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN }, stdio: 'ignore', windowsHide: true });
         await new Promise(r => setTimeout(r, 800));
         const start = Date.now(); const agent = new SocksProxyAgent(`socks5://127.0.0.1:${tempPort}`);
         const result = await new Promise((resolve) => {
@@ -458,7 +464,7 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
         const config = generateXrayConfig(profile.proxyStr, localPort, finalPreProxyConfig);
         fs.writeJsonSync(xrayConfigPath, config);
         const logFd = fs.openSync(xrayLogPath, 'a');
-        const xrayProcess = spawn(BIN_PATH, ['-c', xrayConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': BIN_DIR }, stdio: ['ignore', logFd, logFd], windowsHide: true });
+        const xrayProcess = spawn(BIN_PATH, ['-c', xrayConfigPath], { cwd: BIN_DIR, env: { ...process.env, 'XRAY_LOCATION_ASSET': RESOURCES_BIN }, stdio: ['ignore', logFd, logFd], windowsHide: true });
 
         // 优化：减少等待时间，Xray 通常 300ms 内就能启动
         await new Promise(resolve => setTimeout(resolve, 300));
