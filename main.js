@@ -32,7 +32,27 @@ const BIN_PATH = path.join(BIN_DIR, process.platform === 'win32' ? 'xray.exe' : 
 // Fallback to old location for backward compatibility
 const BIN_DIR_LEGACY = RESOURCES_BIN;
 const BIN_PATH_LEGACY = path.join(BIN_DIR_LEGACY, process.platform === 'win32' ? 'xray.exe' : 'xray');
-const DATA_PATH = path.join(app.getPath('userData'), 'BrowserProfiles');
+
+// 自定义数据目录支持
+const APP_CONFIG_FILE = path.join(app.getPath('userData'), 'app-config.json');
+const DEFAULT_DATA_PATH = path.join(app.getPath('userData'), 'BrowserProfiles');
+
+// 读取自定义数据目录
+function getCustomDataPath() {
+    try {
+        if (fs.existsSync(APP_CONFIG_FILE)) {
+            const config = fs.readJsonSync(APP_CONFIG_FILE);
+            if (config.customDataPath && fs.existsSync(config.customDataPath)) {
+                return config.customDataPath;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to read custom data path:', e);
+    }
+    return DEFAULT_DATA_PATH;
+}
+
+const DATA_PATH = getCustomDataPath();
 const TRASH_PATH = path.join(app.getPath('userData'), '_Trash_Bin');
 const PROFILES_FILE = path.join(DATA_PATH, 'profiles.json');
 const SETTINGS_FILE = path.join(DATA_PATH, 'settings.json');
@@ -373,6 +393,92 @@ ipcMain.handle('get-user-extensions', async () => {
     return settings.userExtensions || [];
 });
 ipcMain.handle('open-url', async (e, url) => { await shell.openExternal(url); });
+
+// --- 自定义数据目录 ---
+ipcMain.handle('get-data-path-info', async () => {
+    return {
+        currentPath: DATA_PATH,
+        defaultPath: DEFAULT_DATA_PATH,
+        isCustom: DATA_PATH !== DEFAULT_DATA_PATH
+    };
+});
+
+ipcMain.handle('select-data-directory', async () => {
+    const { filePaths } = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select Data Directory'
+    });
+    return filePaths && filePaths.length > 0 ? filePaths[0] : null;
+});
+
+ipcMain.handle('set-data-directory', async (e, { newPath, migrate }) => {
+    try {
+        // 验证路径
+        if (!newPath) {
+            return { success: false, error: 'Invalid path' };
+        }
+
+        // 确保目录存在
+        await fs.ensureDir(newPath);
+
+        // 检查是否有写入权限
+        const testFile = path.join(newPath, '.geekez-test');
+        try {
+            await fs.writeFile(testFile, 'test');
+            await fs.remove(testFile);
+        } catch (e) {
+            return { success: false, error: 'No write permission to selected directory' };
+        }
+
+        // 如果需要迁移数据
+        if (migrate && DATA_PATH !== newPath) {
+            const oldProfiles = path.join(DATA_PATH, 'profiles.json');
+            const oldSettings = path.join(DATA_PATH, 'settings.json');
+
+            // 迁移 profiles.json
+            if (fs.existsSync(oldProfiles)) {
+                await fs.copy(oldProfiles, path.join(newPath, 'profiles.json'));
+            }
+            // 迁移 settings.json
+            if (fs.existsSync(oldSettings)) {
+                await fs.copy(oldSettings, path.join(newPath, 'settings.json'));
+            }
+
+            // 迁移所有环境数据目录
+            const profiles = fs.existsSync(oldProfiles) ? await fs.readJson(oldProfiles) : [];
+            for (const profile of profiles) {
+                const oldDir = path.join(DATA_PATH, profile.id);
+                const newDir = path.join(newPath, profile.id);
+                if (fs.existsSync(oldDir)) {
+                    console.log(`Migrating profile ${profile.id}...`);
+                    await fs.copy(oldDir, newDir);
+                }
+            }
+        }
+
+        // 保存新路径到配置
+        await fs.writeJson(APP_CONFIG_FILE, { customDataPath: newPath });
+
+        return { success: true, requiresRestart: true };
+    } catch (err) {
+        console.error('Failed to set data directory:', err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('reset-data-directory', async () => {
+    try {
+        // 删除自定义配置
+        if (fs.existsSync(APP_CONFIG_FILE)) {
+            const config = await fs.readJson(APP_CONFIG_FILE);
+            delete config.customDataPath;
+            await fs.writeJson(APP_CONFIG_FILE, config);
+        }
+        return { success: true, requiresRestart: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
 
 // --- 导出/导入功能 (重构版) ---
 

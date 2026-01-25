@@ -59,6 +59,9 @@ const enTranslations = {
     expSelected: "selected",
     expConfirm: "Export",
     expNoProfiles: "No profiles available",
+    batchHint: "Multiple links = batch create profiles",
+    msgBatchCreated: "Batch created",
+    msgProfiles: "profiles",
     msgExportSuccess: "Export Successful!",
     msgImportSuccess: "Import Successful!",
     msgNoData: "No data found to export.",
@@ -123,7 +126,19 @@ const enTranslations = {
     watermarkEnhancedLabel: "🎯 Enhanced Watermark (Recommended)",
     watermarkEnhancedDesc: "Bottom-right corner, gradient background + icon, subtle pulse animation, no page space occupied",
     watermarkBannerLabel: "🔹 Top Banner",
-    watermarkBannerDesc: "Displayed at page top, very prominent, closable, occupies ~40px space"
+    watermarkBannerDesc: "Displayed at page top, very prominent, closable, occupies ~40px space",
+    dataPathTitle: "📁 Data Directory",
+    dataPathDesc: "Change the location where profile data is stored",
+    dataPathCurrent: "Current Path:",
+    dataPathBrowse: "📂 Browse...",
+    dataPathReset: "↩️ Reset to Default",
+    dataPathRestart: "Restart required for changes to take effect",
+    dataPathConfirmMigrate: "Migrate existing data to new directory?\n\nClick OK to migrate data\nClick Cancel to change path only",
+    dataPathMigrating: "Migrating data, please wait...",
+    dataPathSuccess: "Data directory changed, please restart the app",
+    dataPathError: "Operation failed: ",
+    dataPathConfirmReset: "Reset to default data directory?\n\nNote: This will not migrate data from custom directory.",
+    dataPathResetSuccess: "Restored to default, please restart the app"
 };
 
 // Global i18n Manager

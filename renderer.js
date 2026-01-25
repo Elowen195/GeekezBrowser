@@ -553,8 +553,8 @@ function openAddModal() {
 function closeAddModal() { document.getElementById('addModal').style.display = 'none'; }
 
 async function saveNewProfile() {
-    let name = document.getElementById('addName').value;
-    const proxyStr = document.getElementById('addProxy').value.trim();
+    const nameBase = document.getElementById('addName').value.trim();
+    const proxyText = document.getElementById('addProxy').value.trim();
     const tagsStr = document.getElementById('addTags').value;
     const timezoneInput = document.getElementById('addTimezone').value;
     // 将 "Auto (No Change)" 转换为 "Auto" 存储
@@ -578,12 +578,44 @@ async function saveNewProfile() {
 
     const tags = tagsStr.split(/[,，]/).map(s => s.trim()).filter(s => s);
 
-    if (!name && proxyStr) { const autoName = getProxyRemark(proxyStr); if (autoName) name = autoName; }
-    if (!name || !proxyStr) return showAlert(t('inputReq'));
+    // 分割多行代理链接
+    const proxyLines = proxyText.split('\n').map(l => l.trim()).filter(l => l);
 
-    // 传递 timezone, city, geolocation, language
-    await window.electronAPI.saveProfile({ name, proxyStr, tags, timezone, city, geolocation, language });
-    closeAddModal(); await loadProfiles();
+    if (proxyLines.length === 0) {
+        return showAlert(t('inputReq'));
+    }
+
+    // 批量创建环境
+    let createdCount = 0;
+    for (let i = 0; i < proxyLines.length; i++) {
+        const proxyStr = proxyLines[i];
+        let name;
+
+        if (!nameBase) {
+            // 无名称输入，使用代理备注
+            name = getProxyRemark(proxyStr) || `Profile-${String(i + 1).padStart(2, '0')}`;
+        } else if (proxyLines.length === 1) {
+            // 单个代理，使用输入名称
+            name = nameBase;
+        } else {
+            // 多个代理，添加序号
+            name = `${nameBase}-${String(i + 1).padStart(2, '0')}`;
+        }
+
+        try {
+            await window.electronAPI.saveProfile({ name, proxyStr, tags, timezone, city, geolocation, language });
+            createdCount++;
+        } catch (e) {
+            console.error(`Failed to create profile ${name}:`, e);
+        }
+    }
+
+    closeAddModal();
+    await loadProfiles();
+
+    if (proxyLines.length > 1) {
+        showAlert(`${t('msgBatchCreated') || '批量创建成功'}: ${createdCount} ${t('msgProfiles') || '个环境'}`);
+    }
 }
 
 async function launch(id) {
@@ -1337,6 +1369,7 @@ function openSettings() {
     loadUserExtensions();
     loadWatermarkStyle();
     loadRemoteDebuggingSetting();
+    loadDataPathSetting();
 }
 function closeSettings() {
     document.getElementById('settingsModal').style.display = 'none';
@@ -1367,6 +1400,56 @@ function saveWatermarkStyle(style) {
         }
     });
     showAlert('水印样式已保存，重启环境后生效');
+}
+
+// --- 自定义数据目录 ---
+async function loadDataPathSetting() {
+    try {
+        const info = await window.electronAPI.invoke('get-data-path-info');
+        document.getElementById('currentDataPath').textContent = info.currentPath;
+        document.getElementById('resetDataPathBtn').style.display = info.isCustom ? 'inline-block' : 'none';
+    } catch (e) {
+        console.error('Failed to load data path:', e);
+    }
+}
+
+async function selectDataDirectory() {
+    const newPath = await window.electronAPI.invoke('select-data-directory');
+    if (!newPath) return;
+
+    // 确认迁移
+    const migrate = confirm(t('dataPathConfirmMigrate') || '是否将现有数据迁移到新目录？\n\n选择"确定"迁移数据\n选择"取消"仅更改路径（不迁移）');
+
+    showAlert(t('dataPathMigrating') || '正在迁移数据，请稍候...');
+
+    const result = await window.electronAPI.invoke('set-data-directory', { newPath, migrate });
+
+    if (result.success) {
+        document.getElementById('currentDataPath').textContent = newPath;
+        document.getElementById('resetDataPathBtn').style.display = 'inline-block';
+        document.getElementById('dataPathWarning').style.display = 'block';
+        showAlert(t('dataPathSuccess') || '数据目录已更改，请重启应用');
+    } else {
+        showAlert((t('dataPathError') || '更改失败: ') + result.error);
+    }
+}
+
+async function resetDataDirectory() {
+    if (!confirm(t('dataPathConfirmReset') || '确定要恢复默认数据目录吗？\n\n注意：这不会迁移数据，您需要手动处理自定义目录中的数据。')) {
+        return;
+    }
+
+    const result = await window.electronAPI.invoke('reset-data-directory');
+
+    if (result.success) {
+        const info = await window.electronAPI.invoke('get-data-path-info');
+        document.getElementById('currentDataPath').textContent = info.defaultPath;
+        document.getElementById('resetDataPathBtn').style.display = 'none';
+        document.getElementById('dataPathWarning').style.display = 'block';
+        showAlert(t('dataPathResetSuccess') || '已恢复默认目录，请重启应用');
+    } else {
+        showAlert((t('dataPathError') || '操作失败: ') + result.error);
+    }
 }
 
 async function saveRemoteDebuggingSetting(enabled) {

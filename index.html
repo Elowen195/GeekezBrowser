@@ -1087,8 +1087,10 @@
                     <div class="timezone-dropdown" id="addTimezoneDropdown"></div>
                 </div>
                 <label data-i18n="proxyLink" style="font-size:11px; font-weight:bold; opacity:0.8;">Proxy</label>
-                <textarea id="addProxy" rows="4" placeholder="vmess://, ss://..." spellcheck="false"
-                    autocomplete="off"></textarea>
+                <textarea id="addProxy" rows="4" placeholder="vmess://, ss://... (one per line for batch)"
+                    spellcheck="false" autocomplete="off"></textarea>
+                <div style="font-size:10px; opacity:0.5; margin-bottom:8px;" data-i18n="batchHint">Multiple links =
+                    batch create profiles</div>
                 <!-- Location Selector (Searchable) -->
                 <label data-i18n="locationLabel"
                     style="font-size:11px; font-weight:bold; opacity:0.8; margin-top:8px; display:block;">Location
@@ -1470,6 +1472,47 @@
                                     </div>
                                 </div>
                             </label>
+                        </div>
+                    </div>
+
+                    <!-- Data Directory Section -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="margin-bottom:10px; color:var(--text-primary); font-size:14px;"
+                            data-i18n="dataPathTitle">📁 Data Directory</h4>
+                        <p style="font-size:12px; opacity:0.7; margin-bottom:15px;" data-i18n="dataPathDesc">
+                            Change the location where profile data is stored
+                        </p>
+
+                        <div
+                            style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:8px; padding:15px;">
+                            <div style="margin-bottom:12px;">
+                                <label style="font-size:11px; opacity:0.6; margin-bottom:5px; display:block;"
+                                    data-i18n="dataPathCurrent">Current Path:</label>
+                                <div id="currentDataPath"
+                                    style="font-size:12px; font-family:monospace; background:rgba(0,0,0,0.3); padding:8px 12px; border-radius:6px; word-break:break-all; color:var(--accent);">
+                                    Loading...
+                                </div>
+                            </div>
+
+                            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                <button class="outline" onclick="selectDataDirectory()" style="flex:1; min-width:120px;"
+                                    data-i18n="dataPathBrowse">
+                                    📂 Browse...
+                                </button>
+                                <button class="outline" onclick="resetDataDirectory()" id="resetDataPathBtn"
+                                    style="flex:1; min-width:120px; display:none;" data-i18n="dataPathReset">
+                                    ↩️ Reset to Default
+                                </button>
+                            </div>
+
+                            <div style="margin-top:12px; padding:10px; background:rgba(255,193,7,0.1); border:1px solid rgba(255,193,7,0.3); border-radius:6px; display:none;"
+                                id="dataPathWarning">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:16px;">⚠️</span>
+                                    <span style="font-size:11px; color:var(--warning);"
+                                        data-i18n="dataPathRestart">Restart required for changes to take effect</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

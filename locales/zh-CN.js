@@ -61,6 +61,9 @@ window.zhCN = {
     expSelected: "已选择",
     expConfirm: "导出",
     expNoProfiles: "没有环境",
+    batchHint: "多个链接 = 批量创建环境",
+    msgBatchCreated: "批量创建成功",
+    msgProfiles: "个环境",
     msgExportSuccess: "导出成功！",
     msgImportSuccess: "导入成功！",
     msgNoData: "没有数据可导出。",
@@ -125,5 +128,17 @@ window.zhCN = {
     watermarkEnhancedLabel: "🎯 增强水印 (推荐)",
     watermarkEnhancedDesc: "右下角显示，渐变背景 + 图标，轻微脉冲动画，不占用页面空间",
     watermarkBannerLabel: "🔹 顶部横幅",
-    watermarkBannerDesc: "页面顶部显示，非常醒目，可关闭，占用约40px空间"
+    watermarkBannerDesc: "页面顶部显示，非常醒目，可关闭，占用约40px空间",
+    dataPathTitle: "📁 数据目录",
+    dataPathDesc: "更改环境数据的存储位置",
+    dataPathCurrent: "当前路径:",
+    dataPathBrowse: "📂 浏览...",
+    dataPathReset: "↩️ 恢复默认",
+    dataPathRestart: "更改后需重启应用生效",
+    dataPathConfirmMigrate: "是否将现有数据迁移到新目录？\n\n选择确定迁移数据\n选择取消仅更改路径（不迁移）",
+    dataPathMigrating: "正在迁移数据，请稍候...",
+    dataPathSuccess: "数据目录已更改，请重启应用",
+    dataPathError: "操作失败: ",
+    dataPathConfirmReset: "确定要恢复默认数据目录吗？\n\n注意：这不会迁移自定义目录中的数据。",
+    dataPathResetSuccess: "已恢复默认目录，请重启应用"
 };
