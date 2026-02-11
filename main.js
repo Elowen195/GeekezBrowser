@@ -1435,16 +1435,14 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle, hidden
             env.TZ = profile.fingerprint.timezone;
         }
 
-        // 隐藏模式：启动前保存当前焦点窗口
-        let savedForegroundWindow = null;
+        // 隐藏模式：锁定前台窗口，防止任何程序抢焦点
         if (hidden && process.platform === 'win32') {
             try {
                 const { execSync } = require('child_process');
-                const result = execSync('powershell -Command "Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public class W{[DllImport(\\\"user32.dll\\\")]public static extern IntPtr GetForegroundWindow();}\';[W]::GetForegroundWindow().ToInt64()"', { encoding: 'utf8' });
-                savedForegroundWindow = result.trim();
-                console.log('🔒 Saved foreground window:', savedForegroundWindow);
+                execSync('powershell -Command "Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public class FGL{[DllImport(\\\"user32.dll\\\")]public static extern bool LockSetForegroundWindow(uint c);}\';[FGL]::LockSetForegroundWindow(1)"', { encoding: 'utf8' });
+                console.log('🔒 Foreground window locked');
             } catch (e) {
-                console.log('Failed to save foreground window:', e.message);
+                console.log('Failed to lock foreground:', e.message);
             }
         }
 
@@ -1460,7 +1458,7 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle, hidden
             env: env  // 注入环境变量
         });
 
-        // 隐藏模式：立即最小化窗口，防止抢占焦点
+        // 隐藏模式：立即最小化窗口
         if (hidden) {
             try {
                 const pages = await browser.pages();
@@ -1471,23 +1469,25 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle, hidden
                         windowId,
                         bounds: { windowState: 'minimized' }
                     });
-                    console.log('🙈 Window minimized to prevent focus stealing');
+                    console.log('🙈 Window minimized');
                 }
             } catch (e) {
                 console.log('Failed to minimize window:', e.message);
             }
 
-            // 恢复焦点到原窗口
-            if (savedForegroundWindow && process.platform === 'win32') {
-                try {
-                    const { exec } = require('child_process');
-                    exec(`powershell -Command "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class W{[DllImport(\\\"user32.dll\\\")]public static extern bool SetForegroundWindow(IntPtr hWnd);[DllImport(\\\"user32.dll\\\")]public static extern bool ShowWindow(IntPtr hWnd,int nCmdShow);}';[W]::ShowWindow([IntPtr]${savedForegroundWindow},9);[W]::SetForegroundWindow([IntPtr]${savedForegroundWindow})"`, (err) => {
-                        if (err) console.log('Failed to restore focus:', err.message);
-                        else console.log('🔓 Focus restored to original window');
-                    });
-                } catch (e) {
-                    console.log('Failed to restore focus:', e.message);
-                }
+            // 解锁前台窗口
+            if (process.platform === 'win32') {
+                setTimeout(() => {
+                    try {
+                        const { exec } = require('child_process');
+                        exec('powershell -Command "Add-Type -TypeDefinition \'using System;using System.Runtime.InteropServices;public class FGU{[DllImport(\\\"user32.dll\\\")]public static extern bool LockSetForegroundWindow(uint c);}\';[FGU]::LockSetForegroundWindow(2)"', (err) => {
+                            if (err) console.log('Failed to unlock foreground:', err.message);
+                            else console.log('🔓 Foreground window unlocked');
+                        });
+                    } catch (e) {
+                        console.log('Failed to unlock foreground:', e.message);
+                    }
+                }, 200);
             }
         }
 
