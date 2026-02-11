@@ -306,8 +306,30 @@ function parseProxyLink(link, tag) {
             }
         } else if (link.startsWith('http')) {
             const urlObj = new URL(link);
+            const isHttps = link.startsWith('https://');
+            const params = urlObj.searchParams;
+
             outbound.protocol = "http";
-            outbound.settings = { servers: [{ address: urlObj.hostname, port: parseInt(urlObj.port), users: urlObj.username ? [{ user: urlObj.username, pass: urlObj.password }] : [] }] };
+            outbound.settings = {
+                servers: [{
+                    address: urlObj.hostname,
+                    port: parseInt(urlObj.port) || (isHttps ? 443 : 80),
+                    users: urlObj.username ? [{ user: urlObj.username, pass: urlObj.password }] : []
+                }]
+            };
+
+            // HTTPS 代理需要 TLS 配置
+            if (isHttps) {
+                outbound.streamSettings = {
+                    network: "tcp",
+                    security: "tls",
+                    tlsSettings: {
+                        serverName: params.get("sni") || urlObj.hostname,
+                        fingerprint: "chrome",
+                        allowInsecure: params.get("allowInsecure") === "true" || true
+                    }
+                };
+            }
         } else { throw new Error("Unsupported protocol"); }
     } catch (e) { console.error("Parse Proxy Error:", link, e); throw e; }
     return outbound;
