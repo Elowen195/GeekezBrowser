@@ -253,6 +253,52 @@ async function handleApiRequest(method, pathname, body, params) {
         return { success: true, message: 'Profile stopped' };
     }
 
+    // POST /api/profiles/:idOrName/show - Show hidden browser window
+    const showMatch = pathname.match(/^\/api\/profiles\/([^\/]+)\/show$/);
+    if (method === 'POST' && showMatch) {
+        const profile = findProfile(decodeURIComponent(showMatch[1]));
+        if (!profile) return { status: 404, data: { success: false, error: 'Profile not found' } };
+        const proc = activeProcesses[profile.id];
+        if (!proc || !proc.browser) return { status: 404, data: { success: false, error: 'Profile not running' } };
+
+        try {
+            // 通过 CDP 移动窗口到屏幕中心
+            const pages = await proc.browser.pages();
+            if (pages.length > 0) {
+                const page = pages[0];
+                const session = await page.target().createCDPSession();
+                const { windowId } = await session.send('Browser.getWindowForTarget');
+
+                // 先恢复窗口（如果最小化）
+                await session.send('Browser.setWindowBounds', {
+                    windowId,
+                    bounds: { windowState: 'normal' }
+                });
+
+                // 移动到屏幕中心 (假设 1920x1080 屏幕，窗口 1280x800)
+                await session.send('Browser.setWindowBounds', {
+                    windowId,
+                    bounds: {
+                        left: 320,
+                        top: 140,
+                        width: 1280,
+                        height: 800,
+                        windowState: 'normal'
+                    }
+                });
+
+                // 置顶
+                await page.bringToFront();
+
+                return { success: true, message: 'Window shown' };
+            }
+            return { status: 500, data: { success: false, error: 'No pages found' } };
+        } catch (err) {
+            console.error('Show window error:', err);
+            return { status: 500, data: { success: false, error: err.message } };
+        }
+    }
+
     // GET /api/export/all?password=xxx - Export full backup
     if (method === 'GET' && pathname === '/api/export/all') {
         const password = params.get('password');
