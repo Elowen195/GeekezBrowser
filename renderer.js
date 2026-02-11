@@ -442,9 +442,9 @@ async function init() {
         loadProfiles();
     });
 
-    window.electronAPI.onApiLaunchProfile((id) => {
-        console.log('API triggered launch for:', id);
-        launch(id);
+    window.electronAPI.onApiLaunchProfile((id, hidden) => {
+        console.log('API triggered launch for:', id, 'hidden:', hidden);
+        launch(id, hidden);
     });
 
     // 核心修复：版本号注入
@@ -757,10 +757,10 @@ async function saveNewProfile() {
     }
 }
 
-async function launch(id) {
+async function launch(id, hidden = false) {
     try {
         const watermarkStyle = localStorage.getItem('geekez_watermark_style') || 'enhanced';
-        const msg = await window.electronAPI.launchProfile(id, watermarkStyle);
+        const msg = await window.electronAPI.launchProfile(id, watermarkStyle, hidden);
         if (msg && msg.includes(':')) showAlert(msg);
     } catch (e) { showAlert('Error: ' + e.message); }
 }

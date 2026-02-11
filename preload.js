@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveProfile: (data) => ipcRenderer.invoke('save-profile', data),
     updateProfile: (data) => ipcRenderer.invoke('update-profile', data),
     deleteProfile: (id) => ipcRenderer.invoke('delete-profile', id),
-    launchProfile: (id, watermarkStyle) => ipcRenderer.invoke('launch-profile', id, watermarkStyle),
+    launchProfile: (id, watermarkStyle, hidden) => ipcRenderer.invoke('launch-profile', id, watermarkStyle, hidden),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (data) => ipcRenderer.invoke('save-settings', data),
     exportProfile: (id) => ipcRenderer.invoke('export-profile', id),
@@ -17,5 +17,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onProfileStatus: (callback) => ipcRenderer.on('profile-status', (event, data) => callback(data)),
     // API events
     onRefreshProfiles: (callback) => ipcRenderer.on('refresh-profiles', () => callback()),
-    onApiLaunchProfile: (callback) => ipcRenderer.on('api-launch-profile', (event, id) => callback(id))
+    onApiLaunchProfile: (callback) => ipcRenderer.on('api-launch-profile', (event, id, hidden) => callback(id, hidden))
 });

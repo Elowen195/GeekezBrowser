@@ -187,10 +187,40 @@ async function handleApiRequest(method, pathname, body, params) {
     if (method === 'DELETE' && profileMatch) {
         const profile = findProfile(decodeURIComponent(profileMatch[1]));
         if (!profile) return { status: 404, data: { success: false, error: 'Profile not found' } };
+
+        // 关闭正在运行的进程
+        if (activeProcesses[profile.id]) {
+            await forceKill(activeProcesses[profile.id].xrayPid);
+            try {
+                await activeProcesses[profile.id].browser.close();
+            } catch (e) { }
+            if (activeProcesses[profile.id].logFd !== undefined) {
+                try { fs.closeSync(activeProcesses[profile.id].logFd); } catch (e) { }
+            }
+            delete activeProcesses[profile.id];
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
         profiles = profiles.filter(p => p.id !== profile.id);
         await fs.writeJson(PROFILES_FILE, profiles);
+
+        // 删除浏览器数据
+        const profileDir = path.join(DATA_PATH, profile.id);
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                if (fs.existsSync(profileDir)) {
+                    await fs.remove(profileDir);
+                    console.log(`API: Deleted profile folder: ${profileDir}`);
+                }
+                break;
+            } catch (err) {
+                console.error(`API: Delete attempt ${attempt} failed:`, err.message);
+                if (attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
+            }
+        }
+
         notifyUIRefresh(); // Notify UI to refresh
-        return { success: true, message: 'Profile deleted' };
+        return { success: true, message: 'Profile deleted (including browser data)' };
     }
 
     // GET /api/open/:idOrName - Launch profile
@@ -199,11 +229,15 @@ async function handleApiRequest(method, pathname, body, params) {
         const profile = findProfile(decodeURIComponent(openMatch[1]));
         if (!profile) return { status: 404, data: { success: false, error: 'Profile not found' } };
         if (activeProcesses[profile.id]) return { success: true, message: 'Already running', profileId: profile.id };
+
+        // 支持 ?hidden=true 参数
+        const hidden = params.get('hidden') === 'true';
+
         // Trigger launch via IPC to main window
         if (mainWindow && mainWindow.webContents) {
-            mainWindow.webContents.send('api-launch-profile', profile.id);
+            mainWindow.webContents.send('api-launch-profile', profile.id, hidden);
         }
-        return { success: true, message: 'Launch requested', profileId: profile.id, name: profile.name };
+        return { success: true, message: 'Launch requested', profileId: profile.id, name: profile.name, hidden: hidden };
     }
 
     // POST /api/profiles/:idOrName/stop - Stop profile
@@ -1212,7 +1246,7 @@ ipcMain.handle('export-data', async (e, type) => {
 });
 
 // --- 核心启动逻辑 ---
-ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
+ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle, hidden = false) => {
     const sender = event.sender;
 
     if (activeProcesses[profileId]) {
@@ -1357,6 +1391,12 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle) => {
             '--disk-cache-size=52428800',        // 限制磁盘缓存为 50MB
             '--media-cache-size=52428800'        // 限制媒体缓存为 50MB
         ];
+
+        // 4.5 隐藏模式：将窗口移到屏幕外
+        if (hidden) {
+            launchArgs.push('--window-position=-32000,-32000');
+            console.log('🙈 Hidden mode: Window positioned off-screen');
+        }
 
         // 5. Remote Debugging Port (if enabled)
         if (settings.enableRemoteDebugging && profile.debugPort) {
