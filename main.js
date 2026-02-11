@@ -1447,6 +1447,24 @@ ipcMain.handle('launch-profile', async (event, profileId, watermarkStyle, hidden
             env: env  // 注入环境变量
         });
 
+        // 隐藏模式：立即最小化窗口，防止抢占焦点
+        if (hidden) {
+            try {
+                const pages = await browser.pages();
+                if (pages.length > 0) {
+                    const client = await pages[0].target().createCDPSession();
+                    const { windowId } = await client.send('Browser.getWindowForTarget');
+                    await client.send('Browser.setWindowBounds', {
+                        windowId,
+                        bounds: { windowState: 'minimized' }
+                    });
+                    console.log('🙈 Window minimized to prevent focus stealing');
+                }
+            } catch (e) {
+                console.log('Failed to minimize window:', e.message);
+            }
+        }
+
         activeProcesses[profileId] = {
             xrayPid: xrayProcess.pid,
             browser,
