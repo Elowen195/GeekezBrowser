@@ -1,0 +1,77 @@
+# GeekEZ Browser - Alpine Docker Image
+# For headless server mode with VNC support
+
+FROM alpine:3.19
+
+# Install dependencies
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-cjk \
+    font-noto-emoji \
+    xvfb \
+    x11vnc \
+    dbus \
+    tini
+
+# Set environment
+ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV DISPLAY=:99
+ENV GEEKEZ_DATA_PATH=/data
+ENV API_PORT=3000
+ENV VNC_PORT=5900
+
+# Create app directory
+WORKDIR /app
+
+# Copy only necessary files for server mode
+COPY package-server.json package.json
+COPY server.js .
+COPY utils.js .
+COPY fingerprint.js .
+
+# Install dependencies
+RUN npm install --omit=dev && \
+    npm cache clean --force
+
+# Create data directory
+RUN mkdir -p /data
+
+# Expose ports
+EXPOSE 3000 5900
+
+# Create entrypoint script
+RUN cat > /entrypoint.sh << 'EOF'
+#!/bin/sh
+set -e
+
+# Start Xvfb (virtual display)
+echo "Starting virtual display..."
+Xvfb $DISPLAY -screen 0 1920x1080x24 &
+sleep 1
+
+# Start VNC server (optional, for viewing browser)
+if [ "$ENABLE_VNC" = "true" ]; then
+    echo "Starting VNC server on port $VNC_PORT..."
+    x11vnc -display $DISPLAY -forever -shared -rfbport $VNC_PORT -bg -nopw
+fi
+
+# Start the server
+echo "Starting GeekEZ Browser Server..."
+exec node server.js
+EOF
+RUN chmod +x /entrypoint.sh
+
+# Use tini for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/entrypoint.sh"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://localhost:3000/api/status || exit 1

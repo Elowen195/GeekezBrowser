@@ -1,0 +1,28 @@
+# GeekEZ Browser - Docker Compose
+# Usage: docker-compose -f docker-compose.alpine.yml up -d
+
+version: '3.8'
+
+services:
+  geekez-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile.alpine
+    container_name: geekez-browser
+    ports:
+      - "3000:3000"   # API Server
+      - "5900:5900"   # VNC (optional)
+    environment:
+      - ENABLE_VNC=true
+      - API_PORT=3000
+      - VNC_PORT=5900
+    volumes:
+      - ./data:/data  # Persist browser profiles
+    restart: unless-stopped
+    # Required for Chrome
+    shm_size: '2gb'
+    # Security options for Chrome in Docker
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN

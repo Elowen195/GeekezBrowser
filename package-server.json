@@ -1,0 +1,25 @@
+{
+  "name": "geekez-browser-server",
+  "version": "1.3.10",
+  "description": "GeekEZ Browser - Server Mode (No Electron, for Alpine/proot)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "server": "node server.js"
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.2",
+    "get-port": "^5.1.1",
+    "js-base64": "^3.7.8",
+    "js-yaml": "^4.1.1",
+    "puppeteer": "^24.34.0",
+    "socks-proxy-agent": "^8.0.5",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "puppeteer": {
+    "skipDownload": true
+  }
+}
